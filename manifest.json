@@ -1,0 +1,7 @@
+{
+  "name": "dynamiclight",
+  "version": "1.0.0",
+  "description": "Auto light when holding glowing items",
+  "api": "levilamina",
+  "entry": "dynamiclight.dll"
+}

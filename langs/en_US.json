@@ -1,0 +1,9 @@
+{
+    "form.content": "Please select a function...",
+    "form.button": "Reload configurations",
+    "reload.message.success": "Successfully reload configurations...",
+    "switch.message.fail_1": "You have no item(s) in your mainhand...",
+    "switch.message.fail_2": "This item cannot be switched to offhand...",
+    "switch.message.fail_3": "The following items are allowed to be switched to offhand",
+    "switch.message.success": "Successfully switch items to offhand..."
+}

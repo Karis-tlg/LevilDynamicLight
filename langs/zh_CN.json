@@ -1,0 +1,9 @@
+{
+    "form.content": "请选择操作...",
+    "form.button": "重载配置文件...",
+    "reload.message.success": "重载配置文件成功...",
+    "switch.message.fail_1": "你的主手上没有物品...",
+    "switch.message.fail_2": "此物品不能被切换至副手...",
+    "switch.message.fail_3": "以下物品可被切换至副手",
+    "switch.message.success": "将物品切换至副手成功..."
+}

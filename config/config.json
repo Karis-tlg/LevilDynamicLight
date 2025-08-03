@@ -1,0 +1,7 @@
+{
+    "item_allow_offhand": [
+        "minecraft:torch",
+        "minecraft:soul_torch"
+    ],
+    "refresh_tick": 1
+}
