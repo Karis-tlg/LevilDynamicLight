@@ -2,7 +2,7 @@
 #include "Config.h"
 #include "Lang.h"
 
-#include <ll/api/event/TickEvent.h>
+#include <ll/api/event/world/LevelTickEvent.h>
 #include <ll/api/event/EventBus.h>
 #include <ll/api/command/CommandRegistrar.h>
 #include <ll/api/form/ModalForm.h>
@@ -48,6 +48,21 @@ int get_light_block_runtime_id(int level) {
     std::string block_id = "minecraft:light_block_" + std::to_string(level);
     auto block_data = ll::service::getServer().create_block_data(block_id, nullptr);
     return block_data.runtime_id;
+}
+
+DynamicLight::DynamicLight() {
+    onLoad([this](Mod&) {
+        this->load();
+        return true;
+    });
+    onEnable([this](Mod&) {
+        this->enable();
+        return true;
+    });
+    onDisable([this](Mod&) {
+        this->disable();
+        return true;
+    });
 }
 
 void DynamicLight::load() {
@@ -105,8 +120,8 @@ void DynamicLight::enable() {
         });
 
     // Đăng ký tick event thay vì scheduler
-    tick_listener = ll::event::EventBus::getInstance().emplaceListener<ll::event::TickEvent>(
-        [this](ll::event::TickEvent&) {
+    tick_listener = ll::event::EventBus::getInstance().emplaceListener<world::LevelTickEvent>(
+        [this](world::LevelTickEvent&) {
             handle_tick();
         }
     );

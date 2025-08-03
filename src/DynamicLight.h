@@ -24,11 +24,13 @@ struct PlayerLightInfo {
 
 class DynamicLight : public ll::mod::Mod {
 public:
-    void load() override;
-    void enable() override;
-    void disable() override;
+    DynamicLight();
+    ~DynamicLight();
 
 private:
+    void load();
+    void enable();
+    void disable();
     void handle_tick();
     void handle_offhand(const CommandOrigin& origin, CommandOutput& out);
     void handle_ud(const CommandOrigin& origin, CommandOutput& out);
