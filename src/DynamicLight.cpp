@@ -1,12 +1,23 @@
 #include "DynamicLight.h"
-#include <ll/api/service/Bedrock.h>
+#include "Config.h"
+#include "Lang.h"
+
+#include <ll/api/event/TickEvent.h>
 #include <ll/api/event/EventBus.h>
-#include <ll/api/scheduler/Scheduler.h>
 #include <ll/api/command/CommandRegistrar.h>
+#include <ll/api/form/ModalForm.h>
+#include <ll/api/io/Logger.h>
+
 #include <mc/world/actor/player/Player.h>
 #include <mc/network/packet/UpdateBlockPacket.h>
 #include <mc/network/NetworkBlockPosition.h>
-#include <ll/api/logger/Logger.h>
+#include <mc/server/commands/CommandOrigin.h>
+#include <mc/server/commands/CommandOutput.h>
+
+#include <memory>
+#include <unordered_map>
+#include <vector>
+#include <string>
 #include <filesystem>
 #include <cmath>
 
@@ -83,18 +94,22 @@ void DynamicLight::enable() {
     auto& reg = ll::command::CommandRegistrar::getInstance();
     reg.getOrCreateCommand("offhand", "Switch items to offhand")
         .overload()
-        .execute([this](const ll::command::CommandOrigin& origin, ll::command::CommandOutput& out) {
-            handle_offhand(origin);
+        .execute([this](const CommandOrigin& origin, CommandOutput& out) {
+            handle_offhand(origin, out);
         });
 
     reg.getOrCreateCommand("ud", "Open main form of DynamicLight")
         .overload()
-        .execute([this](const ll::command::CommandOrigin& origin, ll::command::CommandOutput& out) {
-            handle_ud(origin);
+        .execute([this](const CommandOrigin& origin, CommandOutput& out) {
+            handle_ud(origin, out);
         });
 
-    // Tick mỗi refresh_tick
-    ll::service::getScheduler().scheduleRepeatingTask([this]() { handle_tick(); }, config.refresh_tick);
+    // Đăng ký tick event thay vì scheduler
+    tick_listener = ll::event::EventBus::getInstance().emplaceListener<ll::event::TickEvent>(
+        [this](ll::event::TickEvent&) {
+            handle_tick();
+        }
+    );
 
     getSelf().getLogger().info("DynamicLight enabled.");
 }
@@ -171,25 +186,22 @@ void DynamicLight::handle_tick() {
     }
 }
 
-void DynamicLight::handle_offhand(const ll::command::CommandOrigin& origin) {
+void DynamicLight::handle_offhand(const CommandOrigin& origin, CommandOutput& out) {
     auto player = dynamic_cast<mc::Player*>(origin.getEntity());
     if (!player) {
-        origin.getOutput().error("This command can only be used by a player.");
+        out.error("This command can only be used by a player.");
         return;
     }
 
-    auto main_item = player->getCarriedItem();     // Trả về ItemStack*
-    auto offhand_item = player->getOffhandSlot();  // Trả về ItemStack
+    auto main_item = player->getCarriedItem();
+    auto offhand_item = player->getOffhandSlot();
 
     if (!main_item) {
         player->sendMessage(lang.get(player->getLocale(), "switch.message.fail_1"));
         return;
     }
-
-    // Kiểm tra item hợp lệ (trong danh sách allow_offhand của config)
     if (std::find(config.item_allow_offhand.begin(), config.item_allow_offhand.end(), main_item->getTypeName()) == config.item_allow_offhand.end()) {
         player->sendMessage(lang.get(player->getLocale(), "switch.message.fail_2"));
-        // Gợi ý các item hợp lệ
         if (!config.item_allow_offhand.empty()) {
             player->sendMessage(lang.get(player->getLocale(), "switch.message.fail_3"));
             for (const auto& id : config.item_allow_offhand)
@@ -197,20 +209,16 @@ void DynamicLight::handle_offhand(const ll::command::CommandOrigin& origin) {
         }
         return;
     }
-
-    // Swap item giữa main hand và offhand
-    // Lưu ý: offhand_item có thể trả về ItemStack, main_item là ItemStack*
-    // Nếu getOffhandSlot trả về ItemStack*, hãy đổi lại kiểu biến cho đúng!
     player->setCarriedItem(offhand_item);
     player->setOffhandSlot(*main_item);
 
     player->sendMessage(lang.get(player->getLocale(), "switch.message.success"));
 }
 
-void DynamicLight::handle_ud(const ll::command::CommandOrigin& origin) {
+void DynamicLight::handle_ud(const CommandOrigin& origin, CommandOutput& out) {
     auto player = dynamic_cast<mc::Player*>(origin.getEntity());
     if (!player) {
-        origin.getOutput().error("Only player can use this!");
+        out.error("Only player can use this!");
         return;
     }
     ll::form::ModalForm form(
