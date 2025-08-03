@@ -7,7 +7,7 @@
 #include <ll/api/event/player/PlayerUseItemEvent.h>
 #include <ll/api/event/EventBus.h>
 #include <ll/api/command/CommandRegistrar.h>
-#include <ll/api/command/CommandOrigin.h>
+#include <mc/server/commands/CommandOrigin.h>
 #include <ll/api/service/Bedrock.h>
 #include <ll/api/form/ModalForm.h>
 #include <ll/api/logger/Logger.h>
