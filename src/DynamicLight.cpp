@@ -6,6 +6,7 @@
 #include <ll/api/event/EventBus.h>
 #include <ll/api/command/CommandRegistrar.h>
 #include <ll/api/form/ModalForm.h>
+#include <ll/api/service/Server.h>
 #include <ll/api/io/Logger.h>
 
 #include <mc/world/actor/player/Player.h>
@@ -21,36 +22,32 @@
 #include <filesystem>
 #include <cmath>
 
-struct LightRecord {
-    std::vector<int> pos;
-    int dim;
-    int runtime_id;
-    int glow_level;
-};
-std::unordered_map<std::string, LightRecord> player_lights;
+static std::string default_locale = "en_US";
 
+// Helper ghi ánh sáng
 void sendLightBlock(Player* player, int x, int y, int z, int runtime_id) {
     UpdateBlockPacket pkt;
     pkt.mPos = NetworkBlockPosition{x, y, z};
     pkt.mRuntimeId = runtime_id;
-    pkt.mLayer = 0;         // Block layer thường là 0
-    pkt.mUpdateFlags = 3;   // All, giống python
+    pkt.mLayer = 0;
+    pkt.mUpdateFlags = 3;
     pkt.sendTo(*player);
 }
 
+// Lấy runtime id của air block
 int get_air_runtime_id() {
-    auto block_data = ll::service::getServer().create_block_data("minecraft:air", nullptr);
+    auto block_data = ll::service::Server::getInstance().create_block_data("minecraft:air", nullptr);
     return block_data.runtime_id;
 }
 
-// Helper lấy runtime_id của light_block
+// Lấy runtime id của light block với level cho trước
 int get_light_block_runtime_id(int level) {
     std::string block_id = "minecraft:light_block_" + std::to_string(level);
-    auto block_data = ll::service::getServer().create_block_data(block_id, nullptr);
+    auto block_data = ll::service::Server::getInstance().create_block_data(block_id, nullptr);
     return block_data.runtime_id;
 }
 
-DynamicLight::DynamicLight() {
+DynamicLight::DynamicLight() : Mod(Manifest("DynamicLight", "1.0.0")) {
     onLoad([this](Mod&) {
         this->load();
         return true;
@@ -65,8 +62,10 @@ DynamicLight::DynamicLight() {
     });
 }
 
+DynamicLight::~DynamicLight() = default;
+
 void DynamicLight::load() {
-    plugin_dir = getSelf().getConfigDir();
+    plugin_dir = getConfigDir().string();
     config = Config::load(plugin_dir + "/../config/config.json");
     lang.load(plugin_dir + "/../langs");
 
@@ -119,19 +118,17 @@ void DynamicLight::enable() {
             handle_ud(origin, out);
         });
 
-    // Đăng ký tick event thay vì scheduler
-    tick_listener = ll::event::EventBus::getInstance().emplaceListener<world::LevelTickEvent>(
-        [this](world::LevelTickEvent&) {
+    tick_listener = ll::event::EventBus::getInstance().emplaceListener<ll::event::world::LevelTickEvent>(
+        [this](ll::event::world::LevelTickEvent&) {
             handle_tick();
         }
     );
-
-    getSelf().getLogger().info("DynamicLight enabled.");
+    getLogger().info("DynamicLight enabled.");
 }
 
 void DynamicLight::disable() {
     int air_runtime_id = get_air_runtime_id();
-    auto& server = ll::service::getServer();
+    auto& server = ll::service::Server::getInstance();
     for (auto* p : server.getPlayers()) {
         auto it = player_lights.find(p->getName());
         if (it != player_lights.end()) {
@@ -142,20 +139,18 @@ void DynamicLight::disable() {
 }
 
 void DynamicLight::handle_tick() {
-    auto& server = ll::service::getServer();
+    auto& server = ll::service::Server::getInstance();
     int air_runtime_id = get_air_runtime_id();
 
     for (auto* p : server.getPlayers()) {
         if (!p) continue;
 
-        // Lấy item main hand và offhand
-        auto* item_main = p->getCarriedItem();  // ItemStack*
-        auto offhand_item = p->getOffhandSlot(); // ItemStack (by value hoặc const ref, tuỳ API)
+        auto* item_main = p->getCarriedItem();
+        auto offhand_item = p->getOffhandSlot();
 
         std::string glow_id;
         int glow_level = 0;
 
-        // Ưu tiên main hand. Nếu không có thì check offhand
         if (item_main && glowing_items.count(item_main->getTypeName())) {
             glow_id = item_main->getTypeName();
             glow_level = glowing_items[glow_id];
@@ -167,13 +162,11 @@ void DynamicLight::handle_tick() {
         auto& name = p->getName();
 
         if (!glow_id.empty()) {
-            // Player đang cầm item phát sáng ở main hoặc offhand
             std::vector<int> pos = {
                 static_cast<int>(std::floor(p->getPosition().x)),
                 static_cast<int>(std::floor(p->getPosition().y) + 1),
                 static_cast<int>(std::floor(p->getPosition().z))
             };
-
             int dim_id = p->getDimensionId();
             int runtime_id = get_light_block_runtime_id(glow_level);
 
@@ -202,23 +195,25 @@ void DynamicLight::handle_tick() {
 }
 
 void DynamicLight::handle_offhand(const CommandOrigin& origin, CommandOutput& out) {
-    auto player = dynamic_cast<mc::Player*>(origin.getEntity());
+    auto player = dynamic_cast<Player*>(origin.getEntity());
     if (!player) {
         out.error("This command can only be used by a player.");
         return;
     }
+    // TODO: Nếu API có getLocale(), hãy lấy đúng locale của player
+    std::string plocale = default_locale;
 
     auto main_item = player->getCarriedItem();
     auto offhand_item = player->getOffhandSlot();
 
     if (!main_item) {
-        player->sendMessage(lang.get(player->getLocale(), "switch.message.fail_1"));
+        player->sendMessage(lang.get(plocale, "switch.message.fail_1"));
         return;
     }
     if (std::find(config.item_allow_offhand.begin(), config.item_allow_offhand.end(), main_item->getTypeName()) == config.item_allow_offhand.end()) {
-        player->sendMessage(lang.get(player->getLocale(), "switch.message.fail_2"));
+        player->sendMessage(lang.get(plocale, "switch.message.fail_2"));
         if (!config.item_allow_offhand.empty()) {
-            player->sendMessage(lang.get(player->getLocale(), "switch.message.fail_3"));
+            player->sendMessage(lang.get(plocale, "switch.message.fail_3"));
             for (const auto& id : config.item_allow_offhand)
                 player->sendMessage("- " + id);
         }
@@ -227,26 +222,27 @@ void DynamicLight::handle_offhand(const CommandOrigin& origin, CommandOutput& ou
     player->setCarriedItem(offhand_item);
     player->setOffhandSlot(*main_item);
 
-    player->sendMessage(lang.get(player->getLocale(), "switch.message.success"));
+    player->sendMessage(lang.get(plocale, "switch.message.success"));
 }
 
 void DynamicLight::handle_ud(const CommandOrigin& origin, CommandOutput& out) {
-    auto player = dynamic_cast<mc::Player*>(origin.getEntity());
+    auto player = dynamic_cast<Player*>(origin.getEntity());
     if (!player) {
         out.error("Only player can use this!");
         return;
     }
-    ll::form::ModalForm form(
-        "Dynamic Light",
-        lang.get(player->getLocale(), "form.content"),
-        lang.get(player->getLocale(), "form.button"),
-        "",
-        [this](mc::Player& p, bool ok) {
-            if (ok) {
-                config = Config::load(plugin_dir + "/../config/config.json");
-                p.sendMessage(lang.get(p.getLocale(), "reload.message.success"));
-            }
+    std::string plocale = default_locale; // TODO: Nếu có getLocale() thì thay ở đây
+
+    ll::form::ModalForm form;
+    form.setTitle("Dynamic Light")
+        .setContent(lang.get(plocale, "form.content"))
+        .setUpperButton(lang.get(plocale, "form.button"))
+        .setLowerButton("Close");
+    form.sendTo(*player, [this, plocale](Player& p, std::optional<bool> ok, ll::form::FormCancelReason) {
+        if (!ok) return;
+        if (*ok) {
+            config = Config::load(plugin_dir + "/../config/config.json");
+            p.sendMessage(lang.get(plocale, "reload.message.success"));
         }
-    );
-    form.sendTo(*player);
+    });
 }
