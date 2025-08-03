@@ -2,7 +2,7 @@
 
 #include "Config.h"
 #include "Lang.h"
-#include <ll/api/Mod.h>
+#include <ll/api/mod/Mod.h>
 #include <ll/api/event/player/PlayerJoinEvent.h>
 #include <ll/api/event/player/PlayerUseItemEvent.h>
 #include <ll/api/event/EventBus.h>
